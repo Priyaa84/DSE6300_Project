@@ -33,11 +33,14 @@ from sklearn.preprocessing import MinMaxScaler
 import math
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from keras.models import Sequential
 from keras.layers import Dense, LSTM
-import math
 from sklearn.preprocessing import MinMaxScaler
+
+#For Kafka producer
+from kafka import KafkaProducer
+import sys
+import json
 
 #For matplotlib
 import io
@@ -61,7 +64,7 @@ def predictions():
     ###############################################################################
 
 
-    num_days = 730     # The number of days of historical data to retrieve
+    num_days = 1825     # The number of days of historical data to retrieve
     INTERVAL = '1d'     # Sample rate of historical data
 
     # List of symbols for technical indicators
@@ -78,7 +81,9 @@ def predictions():
     stock_name = ""
     while stock_name == "":
         try:
+            # if key doesn't exist, returns None
             symbol = input("Enter in Stock Symbol: ")
+            #symbol = "AAPL"
             stock_data = yf.download(symbol, start=start, end=end, interval=INTERVAL)
             stock_name = symbol
         except:
@@ -150,14 +155,12 @@ def predictions():
     rmse=np.sqrt(np.mean(((predictions - y_test)**2)))
     print("\n\nThe RSME of this prediction was: ", rmse, "\n\n")
 
-
-
-    train = stock_data[300:training_data_len]
+    train = stock_data[:training_data_len]
     valid = stock_data[training_data_len:]
 
-
-
     valid['Predictions'] = predictions
+
+#plot
     symbol = symbol.upper()
 
 #matplotlib Plot png
@@ -173,10 +176,27 @@ def predictions():
 
     output = io.BytesIO()
     FigureCanvas(fig).print_png(output)
-    return Response(output.getvalue(), mimetype='image/png')
+    return output.getvalue()
+    #Response(output.getvalue(), mimetype='image/png')
 ###############################################################################
-# Create a Dashboard
+# Kafka Producer
 ###############################################################################
+# Create producer
+producer = KafkaProducer(
+    bootstrap_servers='localhost:29092', #Kafka server
+    api_version=(0,10,1)
+    )
+
+try:
+    while True:
+        #Send img to topic
+        producer.send('StockPrediction', predictions())
+        print("Press q to Quit! Enter to Continue...")
+        c = sys.stdin.read(1) # reads one byte at a time, similar to getchar()
+        if c == 'q':
+            break
+except KeyboardInterrupt:
+    print("process interrupted")
 
 
 if __name__ == "__main__":
